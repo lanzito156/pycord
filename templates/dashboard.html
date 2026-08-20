@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PyCord</title><link rel="stylesheet" href="/static/style.css"><script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script></head>
+<body>
+<div class="app">
+<aside>
+  <div class="brand">PyCord</div>
+  <div class="me">👤 {{username}} <a href="/logout">Sair</a></div>
+  <h3>Grupos</h3><div id="groups"></div>
+  <button class="secondary" onclick="createGroup()">＋ Criar grupo</button>
+  <h3>Amigos</h3><input id="userSearch" placeholder="Pesquisar usuário"><button class="secondary" onclick="searchUser()">Adicionar amigo</button><div id="users"></div>
+  <div id="friends"></div>
+</aside>
+<main>
+  <header><div><h2 id="roomTitle">Selecione um grupo</h2><span id="status">offline</span></div><button onclick="shareScreen()">🖥 Compartilhar tela</button></header>
+  <section id="chat"></section>
+  <section class="composer"><input id="msg" placeholder="Digite uma mensagem..." onkeydown="if(event.key==='Enter')sendMessage()"><button onclick="sendMessage()">Enviar</button></section>
+  <section class="video"><video id="remoteVideo" autoplay playsinline></video><div id="screenHint">A tela compartilhada aparecerá aqui.</div></section>
+</main>
+</div>
+<script>
+const socket=io();
+let room=null;
+const groups=document.getElementById('groups'), chat=document.getElementById('chat');
+
+async function load(){
+  const g=await (await fetch('/api/groups')).json();
+  groups.innerHTML=g.map(x=>`<button class="group" onclick="openGroup(${x.id},'${x.name.replace(/'/g,"\\'")}')"># ${x.name}</button>`).join('');
+  const f=await (await fetch('/api/friends')).json();
+  document.getElementById('friends').innerHTML='<b>Seus amigos</b>'+f.map(x=>`<div class="friend">● ${x.username}</div>`).join('');
+}
+async function createGroup(){
+  const name=prompt('Nome do grupo:'); if(!name)return;
+  await fetch('/api/groups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}); load();
+}
+async function searchUser(){
+  const q=document.getElementById('userSearch').value;
+  const u=await (await fetch('/api/users?q='+encodeURIComponent(q))).json();
+  document.getElementById('users').innerHTML=u.map(x=>`<div class="result">${x.username}<button onclick="addFriend(${x.id})">+</button></div>`).join('');
+}
+async function addFriend(id){
+  await fetch('/api/friends/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({friend_id:id})});
+  alert('Amigo adicionado!'); load();
+}
+function openGroup(id,name){
+  room='group-'+id; document.getElementById('roomTitle').textContent='# '+name; chat.innerHTML='';
+  socket.emit('join',{room}); document.getElementById('status').textContent='online';
+}
+socket.on('message',d=>{chat.innerHTML+=`<div class="msg"><b>${escapeHtml(d.username)}</b> ${escapeHtml(d.message)}</div>`;chat.scrollTop=chat.scrollHeight;});
+socket.on('system',d=>{chat.innerHTML+=`<div class="system">${escapeHtml(d.message)}</div>`;});
+function sendMessage(){if(!room)return;const i=document.getElementById('msg');if(i.value.trim()){socket.emit('message',{room,message:i.value});i.value='';}}
+function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+let pc;
+async function shareScreen(){
+  if(!room)return alert('Entre em um grupo primeiro.');
+  try{
+    const stream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
+    pc=new RTCPeerConnection();
+    stream.getTracks().forEach(t=>pc.addTrack(t,stream));
+    pc.onicecandidate=e=>{if(e.candidate)socket.emit('webrtc',{room,candidate:e.candidate});};
+    pc.onnegotiationneeded=async()=>{
+      const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+      socket.emit('webrtc',{room,offer:pc.localDescription});
+    };
+    document.getElementById('screenHint').textContent='Você está compartilhando sua tela.';
+  }catch(e){alert('Compartilhamento cancelado ou não permitido pelo navegador.');}
+}
+socket.on('webrtc',async d=>{
+  if(!pc) pc=new RTCPeerConnection();
+  pc.ontrack=e=>{document.getElementById('remoteVideo').srcObject=e.streams[0];document.getElementById('screenHint').textContent='Tela recebida.'};
+  pc.onicecandidate=e=>{if(e.candidate)socket.emit('webrtc',{room,candidate:e.candidate});};
+  if(d.offer){await pc.setRemoteDescription(d.offer);const answer=await pc.createAnswer();await pc.setLocalDescription(answer);socket.emit('webrtc',{room,answer:pc.localDescription});}
+  else if(d.answer){await pc.setRemoteDescription(d.answer);}
+  else if(d.candidate){try{await pc.addIceCandidate(d.candidate)}catch(e){}}
+});
+load();
+</script></body></html>

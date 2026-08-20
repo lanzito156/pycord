@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>PyCord - Cadastro</title><link rel="stylesheet" href="/static/style.css"></head>
+<body class="center"><div class="card auth"><h1>Criar conta</h1><p>Sem Google, sem número de telefone.</p>
+<form method="post"><input name="username" placeholder="Nome de usuário" required><input name="password" type="password" placeholder="Senha" required><button>Cadastrar</button></form>
+{% if error %}<div class="error">{{error}}</div>{% endif %}<a href="/login">Já tenho uma conta</a></div></body></html>

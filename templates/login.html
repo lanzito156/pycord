@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>PyCord - Login</title><link rel="stylesheet" href="/static/style.css"></head>
+<body class="center"><div class="card auth"><h1>PyCord</h1><p>Seu servidor de comunidades.</p>
+<form method="post"><input name="username" placeholder="Usuário" required><input name="password" type="password" placeholder="Senha" required><button>Entrar</button></form>
+{% if error %}<div class="error">{{error}}</div>{% endif %}<a href="/register">Criar uma conta</a></div></body></html>
